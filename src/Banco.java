@@ -33,7 +33,7 @@ public class Banco {
                         System.out.println(usuario.pegarNome() + " sacou " + valor + " dinheiros.");
                         System.out.println("O saldo atual é: " + saldo);
                     } else {
-                        System.out.println("Saldo insuficiente para sacar " + valor + " dinheiros.");
+                        System.out.println("Saldo insuficiente para " + usuario.pegarNome() + " sacar " + valor + " dinheiros.");
                     }
 
                 }
