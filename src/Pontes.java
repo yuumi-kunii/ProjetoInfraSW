@@ -27,7 +27,6 @@ public class Pontes {
 
         public void run(){
             System.out.println(carro + " está tentando atravessar...");
-            System.out.println("...");
 
             try {
                 ponte.espere();
