@@ -1,53 +1,47 @@
+package Entrega1;
+
 import java.util.concurrent.Semaphore;
-
-public class Ponte_Desinc {
+public class Pontes {
     public static class Ponte {
-        private boolean ponteBloqueada;
+        private Semaphore semaphore;
 
-        public Ponte() {
-            this.ponteBloqueada = false;
+        public Ponte(int numVias){
+            this.semaphore = new Semaphore(numVias);
         }
 
-        public synchronized boolean tentarAtravessar(String carro) {
-            if (!ponteBloqueada) {
-                ponteBloqueada = true;
-                System.out.println(carro + " está atravessando a ponte...");
-                return true;
-            } else {
-                System.out.println(carro + " não conseguiu atravessar, ponte bloqueada!");
-                return false;
-            }
+        public void espere() throws InterruptedException{
+            semaphore.acquire();
         }
 
-        public synchronized void sair(String carro) {
-            ponteBloqueada = false;
-            System.out.println(carro + " saiu da ponte.");
+        public void siga() throws InterruptedException{
+            semaphore.release();
         }
+
     }
+    public static class Fio implements Runnable{
+        public Ponte ponte;
+        public String carro;
 
-    public static class Fio implements Runnable {
-        private Ponte ponte;
-        private String carro;
-
-        public Fio(Ponte ponte, String carro) {
+        public Fio(Ponte ponte, String carro){
             this.ponte = ponte;
             this.carro = carro;
         }
 
-        public void run() {
+        public void run(){
+            System.out.println(carro + " está tentando atravessar...");
+
             try {
-                boolean atravessou = ponte.tentarAtravessar(carro);
-                if (atravessou) {
-                    Thread.sleep(4000); // Simula o tempo de travessia
-                }
+                ponte.espere();
+                System.out.println(carro + " atravessou, Catchau!");
+                Thread.sleep(4000);
+                ponte.siga();
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }
     }
-
-    public static void main(String[] args) throws InterruptedException {
-        Ponte MauricioDeNassau = new Ponte();
+    public static void main(String[] args) throws InterruptedException{
+        Ponte MauricioDeNassau = new Ponte(1);
 
         Fio Fio1 = new Fio(MauricioDeNassau, "Lightning McQueen");
         Thread Fio1_Thread = new Thread(Fio1);
@@ -90,5 +84,7 @@ public class Ponte_Desinc {
         Fio6_Thread.join();
         Fio7_Thread.join();
         Fio8_Thread.join();
+
+
     }
 }
