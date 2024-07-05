@@ -7,6 +7,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Barbearia {
 
     public static class Barbeiro implements Runnable {
+        private int numCadeiras;
         private Semaphore semaphoreCadeiras;
         private Semaphore semaphoreCorte;
         private Lock lock;
@@ -14,6 +15,7 @@ public class Barbearia {
 
 
         public Barbeiro(int numCadeiras) {
+            this.numCadeiras = numCadeiras;
             this.semaphoreCadeiras = new Semaphore(numCadeiras, true); // Semaphore para controlar as cadeiras disponíveis na sala de espera
             this.semaphoreCorte = new Semaphore(1);
             this.lock = new ReentrantLock();
@@ -42,7 +44,7 @@ public class Barbearia {
 
 
                 // Verifica se há mais clientes na fila
-                if (semaphoreCadeiras.availablePermits() == 4) {
+                if (semaphoreCadeiras.availablePermits() == numCadeiras - 1) {
                     dormir();
                 }
 
