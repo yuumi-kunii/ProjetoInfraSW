@@ -1,112 +1,103 @@
 package Entrega2;
 
-import Entrega1.Banco;
-
+import java.util.Random;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.Condition;
 import java.util.ArrayList;
 
 public class Restaurante {
-    private final Semaphore lugares = new Semaphore(5);
-    private final ArrayList<Cliente> filaEspera = new ArrayList<>();
-    private final Lock lock = new ReentrantLock();
-    private final Condition condition = lock.newCondition();
-    private CyclicBarrier barrier;
+    public static class Mesa {
+        private final Semaphore lugares = new Semaphore(5);
+        private final ArrayList<Cliente> filaEspera = new ArrayList<>();
+        private final Lock lock = new ReentrantLock();
+        private CyclicBarrier barrier;
 
-    public void entrarNoRestaurante(Cliente cliente) {
-        lock.lock();
-        try {
-            if (tentarJantar(cliente)) {
-                jantar(cliente);
-            } else {
-                irParaFila(cliente);
-            }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private boolean tentarJantar(Cliente cliente) {
-        return lugares.tryAcquire();
-    }
-
-    public void jantar(Cliente cliente) throws InterruptedException {
-        System.out.println(cliente.getId() + " sentou.");
-        try {
-            if (lugares.availablePermits() == 0) {
-               iniciarBarreira();
-            } else {
-               Thread.sleep(5000);
-               sair(cliente);
-            }
-
-        }
-        finally {
-            lock.unlock();
-        }
-    }
-
-    public void irParaFila(Cliente cliente) {
-        lock.lock();
-        try {
-            filaEspera.add(cliente);
-            System.out.println("Cliente " + cliente.getId() + " está esperando na fila.");
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void iniciarBarreira() {
-        barrier = new CyclicBarrier(5, () -> {
-            System.out.println("Clientes comendo juntos.");
+        public void chegarNoRestaurante(Cliente cliente) {
+            System.out.println("Cliente " + cliente.getId() + " chegou no restaurante.");
             try {
-                barrier.await();
-            } catch (InterruptedException | BrokenBarrierException e) {
+                if (lugares.tryAcquire()) {
+                    jantar(cliente);
+                } else {
+                    irParaFila(cliente);
+                }
+            } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            lugares.release(5);
-            System.out.println("Clientes saíram.");
-            notificarProximoCliente();
-        });
-    }
-
-    private void sair(Cliente cliente) {
-        lock.lock();
-        try {
-                System.out.println("Cliente " + cliente.getId() + " saiu após 5 segundos.");
-                lugares.release();
-                notificarProximoCliente();
-        } finally {
-            lock.unlock();
         }
-    }
 
-    private void notificarProximoCliente() {
-        lock.lock();
-        try {
-            if (!filaEspera.isEmpty() && lugares.availablePermits() == 5) {
-                for (int i = 0; i < 5 && !filaEspera.isEmpty(); i++) {
-                    Cliente proximoCliente = filaEspera.remove(0);
-                    entrarNoRestaurante(proximoCliente);
-                }
+        public void jantar(Cliente cliente) {
+            System.out.println("Cliente " + cliente.getId() + " está comendo.");
+            try {
+                Thread.sleep(3000);
+                verificarSaida(cliente);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
             }
-        } finally {
-            lock.unlock();
+        }
+
+        public void irParaFila(Cliente cliente) {
+            lock.lock();
+            try {
+                filaEspera.add(cliente);
+                System.out.println("Cliente " + cliente.getId() + " está esperando na fila.");
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public void verificarSaida(Cliente cliente) {
+            try {
+                if (lugares.availablePermits() == 0 && !filaEspera.isEmpty()) {
+                    barrier = new CyclicBarrier(5);
+                    System.out.println("Cliente " + cliente.getId() + " terminou de comer e está esperando os outros.");
+                    barrier.await();
+                    lugares.release(5);
+                    System.out.println("Clientes saíram juntos.");
+                    for (int i = 1; i <= 5; i++) {
+                        notificarProximoCliente();
+                    }
+                } else {
+                    sair(cliente);
+                }
+            } catch (InterruptedException | BrokenBarrierException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+
+        public void sair(Cliente cliente) {
+            System.out.println("Cliente " + cliente.getId() + " terminou de comer e saiu.");
+            lugares.release();
+            notificarProximoCliente();
+        }
+
+        private void notificarProximoCliente() {
+            lock.lock();
+            try {
+                while (!filaEspera.isEmpty() && lugares.availablePermits() > 0) {
+                    Cliente proximoCliente = filaEspera.remove(0);
+                    lugares.acquire();
+                    jantar(proximoCliente);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            } finally {
+                lock.unlock();
+            }
         }
     }
 
     public static class Cliente implements Runnable {
-        private final Restaurante restaurante;
+        private final Mesa mesa;
         private final int id;
 
-        public Cliente(Restaurante restaurante, int id) {
-            this.restaurante = restaurante;
+        public Cliente(Mesa mesa, int id) {
+            this.mesa = mesa;
             this.id = id;
         }
 
@@ -114,18 +105,20 @@ public class Restaurante {
             return id;
         }
 
-        @Override
         public void run() {
-            restaurante.entrarNoRestaurante(this);
+            mesa.chegarNoRestaurante(this);
         }
     }
 
-    public static void main(String[] args) {
-        Restaurante restaurante = new Restaurante();
-        for (int i = 1; i <= 10; i++) {
-            Cliente cliente = new Cliente(restaurante, i);
+    public static void main(String[] args) throws InterruptedException {
+        Mesa mesaUnica = new Mesa();
+        Random random = new Random();
+
+        for (int i = 1; i <= 100; i++) {
+            Cliente cliente = new Cliente(mesaUnica, i);
             Thread thread = new Thread(cliente);
             thread.start();
+            Thread.sleep(random.nextInt(1000));
         }
     }
 }
