@@ -1,4 +1,4 @@
 # ProjetoInfraSW
 
-Entrega 1 do exercício de concorrência da disciplina de infraestrutura de software.
-Contém os dois problemas propostos.
+Entrega dos exercícios de concorrência da disciplina de infraestrutura de software.
+Contém 4/6 problemas propostos.
