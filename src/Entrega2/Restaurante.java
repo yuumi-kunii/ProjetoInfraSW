@@ -13,12 +13,18 @@ public class Restaurante {
         private final Semaphore lugares = new Semaphore(5);
         private final ArrayList<Cliente> filaEspera = new ArrayList<>();
         private final Lock lock = new ReentrantLock();
-        private CyclicBarrier barrier;
+        private CyclicBarrier barrier = new CyclicBarrier(5, () -> {
+            System.out.println("Clientes saindo juntos...");
+            lugares.release(5);
+            for (int i = 1; i <= 5; i++) {
+                notificarProximoCliente();
+            }
+        });
 
         public void chegarNoRestaurante(Cliente cliente) {
             System.out.println("Cliente " + cliente.getId() + " chegou no restaurante.");
             try {
-                if (lugares.tryAcquire()) {
+                if (lugares.tryAcquire() && filaEspera.isEmpty()) {
                     jantar(cliente);
                 } else {
                     irParaFila(cliente);
@@ -52,14 +58,8 @@ public class Restaurante {
         public void verificarSaida(Cliente cliente) {
             try {
                 if (lugares.availablePermits() == 0 && !filaEspera.isEmpty()) {
-                    barrier = new CyclicBarrier(5);
                     System.out.println("Cliente " + cliente.getId() + " terminou de comer e está esperando os outros.");
                     barrier.await();
-                    lugares.release(5);
-                    System.out.println("Clientes saíram juntos.");
-                    for (int i = 1; i <= 5; i++) {
-                        notificarProximoCliente();
-                    }
                 } else {
                     sair(cliente);
                 }
@@ -76,7 +76,6 @@ public class Restaurante {
         }
 
         private void notificarProximoCliente() {
-            lock.lock();
             try {
                 while (!filaEspera.isEmpty() && lugares.availablePermits() > 0) {
                     Cliente proximoCliente = filaEspera.remove(0);
@@ -86,8 +85,6 @@ public class Restaurante {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
-            } finally {
-                lock.unlock();
             }
         }
     }
@@ -114,7 +111,7 @@ public class Restaurante {
         Mesa mesaUnica = new Mesa();
         Random random = new Random();
 
-        for (int i = 1; i <= 100; i++) {
+        for (int i = 1; i <= 10; i++) {
             Cliente cliente = new Cliente(mesaUnica, i);
             Thread thread = new Thread(cliente);
             thread.start();
