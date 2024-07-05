@@ -132,7 +132,7 @@ public class Barbearia {
             Thread.sleep(500); // Intervalo para simular chegada de novos clientes
         }
         Thread.sleep(20000);
-        for (int i = 1; i <= 10; i++) {
+        for (int i = 11; i <= 100; i++) {
             Thread cliente = new Thread(new Cliente(barbeiro, "Cliente " + i));
 
             cliente.start();
@@ -141,5 +141,6 @@ public class Barbearia {
 
 
         threadBarbeiro.interrupt(); // Interrompe a thread do barbeiro após atender todos os clientes
+
     }
 }
