@@ -20,11 +20,18 @@ class Passageiro extends Thread {
     public void run() {
         try {
             System.out.println(nome + " chegou na parada.");
-            parada.prontoEmbarque();
+
+            parada.getLock().lock();
+            try {
+                while (parada.onibusNaParada) {
+                    parada.getOnibusChegouCondition().await();
+                }
+            } finally {
+                parada.getLock().unlock();
+            }
             parada.esperarOnibus(this);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            System.out.println(nome + " foi interrompido.");
         }
     }
 
@@ -35,33 +42,22 @@ class Passageiro extends Thread {
 
 class ParadaDeOnibus {
     private final int capacidadeOnibus;
-    private final Semaphore semaforo;
-    private final Semaphore bloqueioChegada;
+    private final Semaphore semaforoEmbarque;
     private final Lock lock = new ReentrantLock();
     private final Condition onibusChegou = lock.newCondition();
     private int lugaresDisponiveis;
-    private boolean onibusNaParada = false;
-    public int prontosEmbarque = 0;
-
-    public void prontoEmbarque() {
-        prontosEmbarque++;
-    }
+    public boolean onibusNaParada = false;
+    public int passageirosEsperando = 0;
 
     public ParadaDeOnibus(int capacidadeOnibus) {
         this.capacidadeOnibus = capacidadeOnibus;
         this.lugaresDisponiveis = capacidadeOnibus;
-        this.semaforo = new Semaphore(capacidadeOnibus);
-        this.bloqueioChegada = new Semaphore(1);
+        this.semaforoEmbarque = new Semaphore(0); // Inicialmente bloqueado
     }
 
     public void esperarOnibus(Passageiro passageiro) throws InterruptedException {
-        bloqueioChegada.acquire(); // Bloqueia a chegada de novos passageiros se o ônibus estiver na parada
-        try {
-            semaforo.acquire(); // Aguarda até que haja espaço no ônibus
-
-        } finally {
-            bloqueioChegada.release(); // Libera a chegada de novos passageiros após adquirir espaço no ônibus
-        }
+        passageirosEsperando++;
+        semaforoEmbarque.acquire(); // Aguarda até que haja espaço no ônibus
 
         lock.lock();
         try {
@@ -71,8 +67,8 @@ class ParadaDeOnibus {
             if (lugaresDisponiveis > 0) {
                 lugaresDisponiveis--;
                 System.out.println(passageiro.getNome() + " embarcou.");
-                prontosEmbarque--;
-                semaforo.release();
+                Thread.sleep(500);
+                passageirosEsperando--;
                 if (lugaresDisponiveis == 0) {
                     System.out.println("Ônibus lotado!");
                     onibusChegou.signal();
@@ -80,29 +76,42 @@ class ParadaDeOnibus {
             }
         } finally {
             lock.unlock();
+
         }
     }
 
     public void onibusChegou() throws InterruptedException {
-        bloqueioChegada.acquire(); // Impede que novos passageiros cheguem enquanto o ônibus está na parada
         lock.lock();
         try {
             System.out.println("Ônibus chegou na parada.");
             onibusNaParada = true;
-            onibusChegou.signalAll(); // Avisa todos os passageiros que o ônibus chegou
+            int passageirosParaEmbarcar = Math.min(passageirosEsperando, capacidadeOnibus);
+            semaforoEmbarque.release(passageirosParaEmbarcar); // Libera todos os lugares embarcados
+            onibusChegou.signalAll(); // Avisa os passageiros que o ônibus chegou
 
-            while (lugaresDisponiveis > 0 && semaforo.availablePermits() < capacidadeOnibus) {
+            while (passageirosEsperando > 0 && lugaresDisponiveis > 0) {
                 onibusChegou.await(1, TimeUnit.SECONDS); // Espera que os passageiros embarquem
             }
             System.out.println("Ônibus partiu com " + (capacidadeOnibus - lugaresDisponiveis) + " passageiros.");
-            // Reseta a capacidade do ônibus
+            if ((capacidadeOnibus - lugaresDisponiveis) == 0) {
+                System.out.println("Acabaram os passageiros, a parada fechou!");
+                Thread.currentThread().interrupt();
+            }
             onibusNaParada = false;
             lugaresDisponiveis = capacidadeOnibus;
+
             onibusChegou.signalAll(); // Avisa os passageiros que o ônibus partiu
         } finally {
             lock.unlock();
-            bloqueioChegada.release(); // Libera a chegada de novos passageiros após o ônibus partir
         }
+    }
+
+    public Lock getLock() {
+        return lock;
+    }
+
+    public Condition getOnibusChegouCondition() {
+        return onibusChegou;
     }
 }
 
@@ -117,12 +126,11 @@ class Onibus extends Thread {
     public void run() {
         try {
             while (true) {
-                parada.onibusChegou();
                 TimeUnit.SECONDS.sleep(ThreadLocalRandom.current().nextInt(1, 4));
+                parada.onibusChegou();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            System.out.println("Ônibus foi interrompido.");
         }
     }
 }
@@ -132,7 +140,6 @@ public class Parada {
         final int capacidadeOnibus = 50;
         ParadaDeOnibus parada = new ParadaDeOnibus(capacidadeOnibus);
 
-        // Cria e inicia a thread do ônibus
         Onibus onibus = new Onibus(parada);
         onibus.start();
 
@@ -141,7 +148,7 @@ public class Parada {
             Passageiro passageiro = new Passageiro(parada, "Passageiro " + i);
             passageiro.start();
             try {
-                TimeUnit.MILLISECONDS.sleep(100); // Intervalo entre a chegada dos passageiros
+                TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextInt(0, 100)); // Intervalo entre a chegada dos passageiros
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 System.out.println("Thread principal foi interrompida.");
