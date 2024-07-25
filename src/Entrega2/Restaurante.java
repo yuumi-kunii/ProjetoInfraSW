@@ -47,7 +47,7 @@ public class Restaurante {
 
         public void jantar(Cliente cliente) throws InterruptedException {
             System.out.println("Cliente " + cliente.getId() + " está jantando.");
-            Thread.sleep(2000); // Tempo de jantar
+            Thread.sleep(5000);
             verificarSaida(cliente);
         }
 
