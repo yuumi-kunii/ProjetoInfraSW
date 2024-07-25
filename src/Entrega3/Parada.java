@@ -23,6 +23,7 @@ class Passageiro extends Thread {
 
             parada.getLock().lock();
             try {
+                //Se o passageiro chegar e tiver um ônibus no embarque, ele aguarda para embarcar no próximo
                 while (parada.onibusNaParada) {
                     parada.getOnibusChegouCondition().await();
                 }
@@ -59,15 +60,15 @@ class ParadaDeOnibus {
         passageirosEsperando++;
         semaforoEmbarque.acquire(); // Aguarda até que haja espaço no ônibus
 
-        lock.lock();
+        lock.lock(); //Lock necessário para consulta de variáveis compartilhadas
         try {
+            //Passageiro espera a chegada do ônibus para embarcar
             while (!onibusNaParada) {
                 onibusChegou.await();
             }
             if (lugaresDisponiveis > 0) {
                 lugaresDisponiveis--;
-                System.out.println(passageiro.getNome() + " embarcou.");
-                Thread.sleep(500);
+                System.out.println(passageiro.getNome() + " embarcou."); //Registro do embarque
                 passageirosEsperando--;
                 if (lugaresDisponiveis == 0) {
                     System.out.println("Ônibus lotado!");
@@ -86,20 +87,22 @@ class ParadaDeOnibus {
             System.out.println("Ônibus chegou na parada.");
             onibusNaParada = true;
             int passageirosParaEmbarcar = Math.min(passageirosEsperando, capacidadeOnibus);
-            semaforoEmbarque.release(passageirosParaEmbarcar); // Libera todos os lugares embarcados
             onibusChegou.signalAll(); // Avisa os passageiros que o ônibus chegou
+            semaforoEmbarque.release(passageirosParaEmbarcar); // Libera todos os lugares embarcados de uma vez para simular concorrência
 
+            // Espera que os passageiros embarquem enquanto houverem passageiros liberados para embarcar e vagas no ônibus
             while (passageirosEsperando > 0 && lugaresDisponiveis > 0) {
-                onibusChegou.await(1, TimeUnit.SECONDS); // Espera que os passageiros embarquem
+                onibusChegou.await(1, TimeUnit.SECONDS);
             }
             System.out.println("Ônibus partiu com " + (capacidadeOnibus - lugaresDisponiveis) + " passageiros.");
+            //Encerra a thread do ônibus quando acabam os passageiros
             if ((capacidadeOnibus - lugaresDisponiveis) == 0) {
                 System.out.println("Acabaram os passageiros, a parada fechou!");
                 Thread.currentThread().interrupt();
             }
+            //Resetando as variáveis da parada
             onibusNaParada = false;
             lugaresDisponiveis = capacidadeOnibus;
-
             onibusChegou.signalAll(); // Avisa os passageiros que o ônibus partiu
         } finally {
             lock.unlock();
@@ -125,6 +128,7 @@ class Onibus extends Thread {
     @Override
     public void run() {
         try {
+            //Chega dos ônibus em intervalos de 1 a 4 segundos
             while (true) {
                 TimeUnit.SECONDS.sleep(ThreadLocalRandom.current().nextInt(1, 4));
                 parada.onibusChegou();
