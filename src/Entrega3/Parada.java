@@ -67,7 +67,6 @@ class ParadaDeOnibus {
             if (lugaresDisponiveis > 0) {
                 lugaresDisponiveis--;
                 System.out.println(passageiro.getNome() + " embarcou.");
-                Thread.sleep(500);
                 passageirosEsperando--;
                 if (lugaresDisponiveis == 0) {
                     System.out.println("Ônibus lotado!");
