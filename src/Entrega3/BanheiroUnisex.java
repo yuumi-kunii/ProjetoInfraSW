@@ -1,139 +1,147 @@
 package Entrega3;
 
+import Entrega2.Restaurante;
+
 import java.util.LinkedList;
 import java.util.Random;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class BanheiroUnisex {
     public static class Banheiro {
-        private final Semaphore lugares = new Semaphore(3);
-        private final LinkedList<Pessoa> filaEspera = new LinkedList<>();
-        private final Lock filaLock = new ReentrantLock();
-        private String sinal = null;
-        private final CountDownLatch latch;
+        private final Semaphore lugares = new Semaphore(3); // Gerencia o número de vagas no banheiro
+        private final LinkedList<Pessoa> filaEspera = new LinkedList<>(); // Fila de espera das pessoas
+        private final Lock filaLock = new ReentrantLock(); // Lock para gerenciar a fila de espera
+        private String sinal = null; // Indica o gênero da pessoa que está no banheiro
 
-        public Banheiro(CountDownLatch latch) {
-            this.latch = latch;
+        // Método que direciona a pessoa que chega para o banheiro ou para a fila
+        public void chegarNoBanheiro(Pessoa pessoa) throws InterruptedException {
+            System.out.println("Pessoa " + pessoa.getId() + " (" + pessoa.getGenero() + ") foi ao toalete.");
+            // Verifica se a pessoa pode entrar no banheiro imediatamente ou se precisa esperar
+            if ((sinal == null || sinal.equals(pessoa.getGenero())) && lugares.availablePermits() > 0 && filaEspera.isEmpty()) {
+                if (sinal == null) {
+                    sinal = pessoa.getGenero(); // Define o sinal se o banheiro estava vazio
+                }
+                // Adquire um lugar no banheiro
+                lugares.acquire();
+                entrar(pessoa); // Método para a pessoa entrar no banheiro
+            } else {
+                System.out.println("Pessoa " + pessoa.getId() + " (" + pessoa.getGenero() + ") está esperando na fila.");
+                esperar(pessoa);
+            }
+
         }
 
-        public void chegarNoBanheiro(Pessoa pessoa) {
-            System.out.println("Pessoa " + pessoa.getId() + " (" + pessoa.getGenero() + ") foi ao toalete.");
+        private void esperar(Pessoa pessoa) {
             filaLock.lock();
             try {
-                if (sinal == null || sinal.equals(pessoa.getGenero())) {
-                    if (lugares.tryAcquire()) {
-                        if (sinal == null) {
-                            sinal = pessoa.getGenero();
-                        }
-                        filaLock.unlock();
-                        entrar(pessoa);
-                    } else {
-                        filaEspera.add(pessoa);
-                        System.out.println("Pessoa " + pessoa.getId() + " está esperando na fila.");
-                        filaLock.unlock();
-                    }
-                } else {
-                    filaEspera.add(pessoa);
-                    System.out.println("Pessoa " + pessoa.getId() + " está esperando na fila.");
-                    filaLock.unlock();
-                }
-            } catch (Exception e) {
+                filaEspera.add(pessoa);
+            } finally {
                 filaLock.unlock();
-                throw new RuntimeException(e);
             }
         }
 
-        public void entrar(Pessoa pessoa) {
+        private void entrar(Pessoa pessoa) {
             try {
                 System.out.println("Pessoa " + pessoa.getId() + " (" + pessoa.getGenero() + ") entrou no toalete.");
-                Thread.sleep(new Random().nextInt(3000)); // Simula o tempo de uso do banheiro
-
-                sair(pessoa);
+                Thread.sleep(new Random().nextInt(1000)); // Simula o tempo de uso do banheiro
+                sair(pessoa); // Método para a pessoa sair do banheiro
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
 
-        public void sair(Pessoa pessoa) {
+        private void sair(Pessoa pessoa) {
             System.out.println("Pessoa " + pessoa.getId() + " (" + pessoa.getGenero() + ") saiu do toalete.");
-            lugares.release();
-            filaLock.lock();
+            lugares.release(); // Libera um lugar no banheiro
             try {
                 if (lugares.availablePermits() == 3) {
-                    sinal = null;
+                    sinal = null; // Se o banheiro está vazio, o sinal volta a ser nulo
                     System.out.println("Banheiro está vazio.");
                 }
-                notificarProximaPessoa();
-            } finally {
-                filaLock.unlock();
+                notificarProximaPessoa(); // Chama a próxima pessoa da fila
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-            latch.countDown();
         }
+
 
         private void notificarProximaPessoa() {
             filaLock.lock();
             try {
-                while (lugares.availablePermits() > 0 && !filaEspera.isEmpty()) {
+                // Enquanto houver pessoas na fila e vagas disponíveis, processa as pessoas na fila
+                while (!filaEspera.isEmpty() && lugares.availablePermits() > 0) {
+                    // Retorna a primeira pessoa da fila sem removê-la
                     Pessoa proximaPessoa = filaEspera.peek();
+
+                    // Verifica se o gênero da pessoa na fila é o mesmo que o sinal ou se o sinal está nulo
                     if (sinal == null || sinal.equals(proximaPessoa.getGenero())) {
-                        filaEspera.poll(); // Remove a pessoa da fila
+                        // Altera o sinal se o banheiro estava vazio
                         if (sinal == null) {
                             sinal = proximaPessoa.getGenero();
                         }
-                        new Thread(() -> entrar(proximaPessoa)).start();
+                        filaEspera.removeFirst();
+                        lugares.acquire();
+                        new Thread(() -> {
+                            entrar(proximaPessoa);
+                        }).start();
                     } else {
                         break;
                     }
                 }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             } finally {
                 filaLock.unlock();
             }
         }
     }
 
+    // Criação da classe Pessoa com o banheiro, id e o gênero
     public static class Pessoa implements Runnable {
         private final Banheiro banheiro;
         private final int id;
         private final String genero;
 
+        // Construtor da classe
         public Pessoa(Banheiro banheiro, int id, String genero) {
             this.banheiro = banheiro;
             this.id = id;
             this.genero = genero;
         }
 
+        // Método que retorna o id da pessoa
         public int getId() {
             return id;
         }
 
+        // Método que retorna o gênero
         public String getGenero() {
             return genero;
         }
 
+        // Método chamado quando a thread é iniciada
         public void run() {
-            banheiro.chegarNoBanheiro(this);
+            try {
+                banheiro.chegarNoBanheiro(this);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int totalPessoas = 100;
-        CountDownLatch latch = new CountDownLatch(totalPessoas);
-        Banheiro banheiroUnico = new Banheiro(latch);
-        Random random = new Random();
+        Banheiro banheiroUnico = new Banheiro(); // Instância do banheiro
+        Random random = new Random(); // Gerador de números aleatórios
 
-        for (int i = 1; i <= totalPessoas; i++) {
-            String genero = random.nextBoolean() ? "mulher" : "homem";
-            Pessoa pessoa = new Pessoa(banheiroUnico, i, genero);
-            Thread thread = new Thread(pessoa);
-            thread.start();
-            Thread.sleep(random.nextInt(1000));
+        // Loop para inicializar as threads
+        for (int i = 1; i <= 100; i++) {
+            String genero = random.nextBoolean() ? "mulher" : "homem"; // Define um gênero aleatoriamente
+            Pessoa pessoa = new Pessoa(banheiroUnico, i, genero); // Instância da pessoa
+            Thread thread = new Thread(pessoa); // Instância da thread
+            thread.start(); // Inicia a thread
+            Thread.sleep(random.nextInt(500)); // Tempo aleatório para criação das threads
         }
-
-        // Espera até que todas as pessoas tenham terminado de usar o banheiro
-        latch.await();
-        System.out.println("Todas as pessoas terminaram de usar o banheiro.");
     }
 }
